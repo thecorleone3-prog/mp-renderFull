@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 # ======================================================
 # 🔧 CARGA DE VARIABLES DE ENTORNO
 # ======================================================
-load_dotenv(override=False)
+load_dotenv(override=True)
 
 # ======================================================
 # 🔥 CUENTAS MP + DESTINO (ROUTING)
