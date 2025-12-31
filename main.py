@@ -15,8 +15,13 @@ load_dotenv(override=True)
 # ======================================================
 MP_ACCOUNTS = [
     {
-        "nombre": "MP_YO",
+        "nombre": "MP_AlbertoVera",
         "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN"),
+        "DESTINO": os.getenv("WEBAPP_URL_SHEET_1")
+    },
+    {
+        "nombre": "MP_LeandroVera",
+        "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN2"),
         "DESTINO": os.getenv("WEBAPP_URL_SHEET_1")
     },
 ]
