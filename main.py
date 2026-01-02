@@ -4,6 +4,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from dotenv import load_dotenv
+from collections import deque
 
 # ======================================================
 # 🔧 CARGA DE VARIABLES DE ENTORNO
@@ -11,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 # ======================================================
-# 🔥 CUENTAS MP + DESTINO (ROUTING)
+# 🔥 CUENTAS MP + DESTINO
 # ======================================================
 MP_ACCOUNTS = [
     {
@@ -27,64 +28,76 @@ MP_ACCOUNTS = [
 ]
 
 # ======================================================
-# ❗ VALIDACIONES CRÍTICAS
+# ❗ VALIDACIONES
 # ======================================================
 for acc in MP_ACCOUNTS:
     if not acc["ACCESS_TOKEN"]:
         raise RuntimeError(f"❌ Falta ACCESS_TOKEN para {acc['nombre']}")
     if not acc["DESTINO"]:
-        raise RuntimeError(f"❌ Falta DESTINO (WEBAPP_URL) para {acc['nombre']}")
+        raise RuntimeError(f"❌ Falta DESTINO para {acc['nombre']}")
 
 # ======================================================
-# 🕒 FECHA DE ARRANQUE
+# 🕒 FECHA INICIAL (UTC)
 # ======================================================
 inicio_dt = datetime.now(timezone.utc)
+ultimo_dt = inicio_dt
 
 def formato_mp(dt):
     dt = dt.replace(microsecond=0)
     return dt.strftime("%Y-%m-%dT%H:%M:%S") + ".000Z"
 
-inicio_script = formato_mp(inicio_dt)
-
 print("🟢 Script iniciado")
-print("🕒 Consultando operaciones DESDE:", inicio_script)
+print("🕒 Inicio:", formato_mp(inicio_dt))
 
 # ======================================================
-# 📦 CACHE DE PROCESADOS (por cuenta)
+# 📦 CACHE FIFO DE IDS PROCESADOS
 # ======================================================
-procesados = {acc["nombre"]: set() for acc in MP_ACCOUNTS}
 MAX_IDS = 5000
+procesados = {
+    acc["nombre"]: deque(maxlen=MAX_IDS)
+    for acc in MP_ACCOUNTS
+}
+
+# ======================================================
+# 🌐 SESSION HTTP
+# ======================================================
+session = requests.Session()
 
 # ======================================================
 # 📌 CONSULTAR OPERACIONES MP
 # ======================================================
-def obtener_operaciones(access_token):
+def obtener_operaciones(access_token, desde):
     url = "https://api.mercadopago.com/v1/payments/search"
     params = {
         "sort": "date_created",
         "criteria": "desc",
         "limit": 5,
-        "begin_date": inicio_script
+        "begin_date": formato_mp(desde)
     }
     headers = {"Authorization": f"Bearer {access_token}"}
 
     try:
-        resp = requests.get(url, headers=headers, params=params, timeout=10)
-        if resp.status_code != 200:
-            print(f"⚠️ MP error {resp.status_code}: {resp.text}")
+        r = session.get(url, headers=headers, params=params, timeout=10)
+        if r.status_code != 200:
+            print(f"⚠️ MP {r.status_code}: {r.text}")
             return []
-        return resp.json().get("results", [])
+        return r.json().get("results", [])
+    except requests.Timeout:
+        print("⏱ Timeout MP")
+    except requests.ConnectionError:
+        print("🌐 Error conexión MP")
     except Exception as e:
-        print("❌ Error MP:", e)
-        return []
+        print("❌ Error MP:", repr(e))
+
+    return []
 
 # ======================================================
-# 📌 CONVERTIR OPERACIÓN
+# 📌 NORMALIZAR OPERACIÓN
 # ======================================================
 def convertir_op(op, origen):
-    td = op.get("transaction_details", {}) or {}
-    poi = op.get("point_of_interaction", {}) or {}
-    tdata = poi.get("transaction_data", {}) or {}
+    td = op.get("transaction_details") or {}
+    poi = op.get("point_of_interaction") or {}
+    tdata = poi.get("transaction_data") or {}
 
     return {
         "id": op.get("id"),
@@ -113,11 +126,11 @@ def convertir_op(op, origen):
 # 🔁 LOOP PRINCIPAL
 # ======================================================
 def main():
-    print("🔁 Loop principal activo")
+    global ultimo_dt
+    print("🔁 Loop activo")
 
     while True:
         try:
-            # 🔀 Lotes por destino
             lotes = {}
 
             for acc in MP_ACCOUNTS:
@@ -125,13 +138,14 @@ def main():
                 token = acc["ACCESS_TOKEN"]
                 destino = acc["DESTINO"]
 
-                if destino not in lotes:
-                    lotes[destino] = []
+                lotes.setdefault(destino, [])
 
-                ops = obtener_operaciones(token)
+                ops = obtener_operaciones(token, ultimo_dt)
 
                 for op in ops:
                     op_id = str(op.get("id"))
+                    if not op_id:
+                        continue
 
                     try:
                         fecha_op = datetime.fromisoformat(
@@ -140,36 +154,42 @@ def main():
                     except Exception:
                         continue
 
-                    if fecha_op < inicio_dt:
+                    if fecha_op < ultimo_dt:
                         continue
                     if op_id in procesados[nombre]:
                         continue
 
-                    payer = op.get("payer", {}) or {}
+                    payer = op.get("payer") or {}
                     dni = payer.get("identification", {}).get("number")
                     email = payer.get("email")
 
-                    if (not dni) and (not email):
+                    if not dni and not email:
                         continue
 
-                    lotes[destino].append(convertir_op(op, origen=nombre))
-                    procesados[nombre].add(op_id)
+                    lotes[destino].append(convertir_op(op, nombre))
+                    procesados[nombre].append(op_id)
 
-                    if len(procesados[nombre]) > MAX_IDS:
-                        procesados[nombre].clear()
+                    if fecha_op > ultimo_dt:
+                        ultimo_dt = fecha_op
 
-            # 📤 Enviar cada lote a su Sheet
+            # 📤 ENVÍO A GAS
             for destino, lote in lotes.items():
                 if not lote:
                     continue
+
                 try:
-                    r = requests.post(destino, json=lote, timeout=15)
-                    print(f"📤 {len(lote)} ops → {destino} [{r.status_code}]")
+                    r = session.post(destino, json=lote, timeout=15)
+                    if r.status_code == 200:
+                        print(f"📤 {len(lote)} ops → OK")
+                    else:
+                        print(f"❌ GAS {r.status_code}: {r.text}")
+                except requests.Timeout:
+                    print("⏱ Timeout GAS")
                 except Exception as e:
-                    print("❌ Error enviando a GAS:", e)
+                    print("❌ Error GAS:", repr(e))
 
         except Exception as e:
-            print("🔥 ERROR GENERAL:", e)
+            print("🔥 ERROR GENERAL:", repr(e))
 
         time.sleep(40)
 
@@ -179,6 +199,9 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except KeyboardInterrupt:
+        print("⏹ Detenido manualmente")
+        sys.exit(0)
     except Exception as fatal:
-        print("💀 CRASH FATAL:", fatal)
+        print("💀 CRASH FATAL:", repr(fatal))
         sys.exit(1)
