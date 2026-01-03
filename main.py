@@ -2,7 +2,7 @@ import requests
 import time
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from collections import deque
 
@@ -71,7 +71,7 @@ def obtener_operaciones(access_token, desde):
     params = {
         "sort": "date_created",
         "criteria": "desc",
-        "limit": 5,
+        "limit": 20,  # ⬅️ AUMENTADO (ANTES 5)
         "begin_date": formato_mp(desde)
     }
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -140,7 +140,10 @@ def main():
 
                 lotes.setdefault(destino, [])
 
-                ops = obtener_operaciones(token, ultimo_dt)
+                # ⬅️ BUFFER DE SEGURIDAD (5 MIN)
+                desde_seguro = ultimo_dt - timedelta(minutes=5)
+
+                ops = obtener_operaciones(token, desde_seguro)
 
                 for op in ops:
                     op_id = str(op.get("id"))
@@ -154,25 +157,20 @@ def main():
                     except Exception:
                         continue
 
-                    if fecha_op < ultimo_dt:
-                        continue
                     if op_id in procesados[nombre]:
                         continue
 
-                    payer = op.get("payer") or {}
-                    dni = payer.get("identification", {}).get("number")
-                    email = payer.get("email")
-
-                    if not dni and not email:
-                        continue
-
-                    lotes[destino].append(convertir_op(op, nombre))
+                    lote_op = convertir_op(op, nombre)
+                    lotes[destino].append(lote_op)
                     procesados[nombre].append(op_id)
 
+                    # ⬅️ SOLO AVANZA, NUNCA RETROCEDE
                     if fecha_op > ultimo_dt:
                         ultimo_dt = fecha_op
 
-            # 📤 ENVÍO A GAS
+            # ==================================================
+            # 📤 ENVÍO A GOOGLE APPS SCRIPT
+            # ==================================================
             for destino, lote in lotes.items():
                 if not lote:
                     continue
