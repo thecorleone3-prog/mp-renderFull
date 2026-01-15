@@ -103,7 +103,7 @@ def obtener_operaciones(access_token, desde):
     params = {
         "sort": "date_created",
         "criteria": "desc",
-        "limit": 20,  # ⬅️ AUMENTADO (ANTES 5)
+        "limit": 20,
         "begin_date": formato_mp(desde)
     }
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -126,7 +126,7 @@ def obtener_operaciones(access_token, desde):
 # ======================================================
 # 📌 NORMALIZAR OPERACIÓN
 # ======================================================
-def convertir_op(op, origen):
+def convertir_op(op, origen, direccion):
     td = op.get("transaction_details") or {}
     poi = op.get("point_of_interaction") or {}
     tdata = poi.get("transaction_data") or {}
@@ -134,6 +134,8 @@ def convertir_op(op, origen):
     return {
         "id": op.get("id"),
         "origen": origen,
+        "direccion": direccion,
+
         "monto": op.get("transaction_amount"),
         "fecha": op.get("date_created"),
         "estado": op.get("status"),
@@ -192,7 +194,16 @@ def main():
                     if op_id in procesados[nombre]:
                         continue
 
-                    lote_op = convertir_op(op, nombre)
+                    # ============================
+                    # 🔥 CLASIFICACIÓN DIRECCIÓN
+                    # ============================
+                    payer = op.get("payer", {}) or {}
+                    dni = payer.get("identification", {}).get("number")
+                    email = payer.get("email")
+
+                    direccion = "SALIENTE" if (not dni) and (not email) else "ENTRANTE"
+
+                    lote_op = convertir_op(op, nombre, direccion)
                     lotes[destino].append(lote_op)
                     procesados[nombre].append(op_id)
 
