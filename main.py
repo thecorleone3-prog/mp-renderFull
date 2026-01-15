@@ -15,6 +15,9 @@ load_dotenv(override=True)
 # 🔥 CUENTAS MP + DESTINO
 # ======================================================
 MP_ACCOUNTS = [
+    # =========================
+    # 📄 SHEET 1
+    # =========================
     {
         "nombre": "MP_AlbertoVera",
         "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN"),
@@ -25,6 +28,35 @@ MP_ACCOUNTS = [
         "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN2"),
         "DESTINO": os.getenv("WEBAPP_URL_SHEET_1")
     },
+
+    # =========================
+    # 📄 SHEET 2
+    # =========================
+    {
+        "nombre": "MP_MARISA",
+        "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN3"),
+        "DESTINO": os.getenv("WEBAPP_URL_SHEET_2")
+    },
+    {
+        "nombre": "MP_OSCAR",
+        "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN4"),
+        "DESTINO": os.getenv("WEBAPP_URL_SHEET_2")
+    },
+    {
+        "nombre": "MP_VEIGA",
+        "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN5"),
+        "DESTINO": os.getenv("WEBAPP_URL_SHEET_2")
+    },
+    {
+        "nombre": "MP_ZANONI",
+        "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN6"),
+        "DESTINO": os.getenv("WEBAPP_URL_SHEET_2")
+    },
+    {
+        "nombre": "MP_MASULLO",
+        "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN7"),
+        "DESTINO": os.getenv("WEBAPP_URL_SHEET_2")
+    }
 ]
 
 # ======================================================
