@@ -33,11 +33,6 @@ MP_ACCOUNTS = [
     # 📄 SHEET 2
     # =========================
     {
-        "nombre": "MP_OSCAR",
-        "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN4"),
-        "DESTINO": os.getenv("WEBAPP_URL_SHEET_2")
-    },
-    {
         "nombre": "MP_VEIGA",
         "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN5"),
         "DESTINO": os.getenv("WEBAPP_URL_SHEET_2")
