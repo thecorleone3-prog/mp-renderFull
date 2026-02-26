@@ -23,23 +23,13 @@ MP_ACCOUNTS = [
         "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN"),
         "DESTINO": os.getenv("WEBAPP_URL_SHEET_1")
     },
-    {
-        "nombre": "MP_LeandroVera",
-        "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN2"),
-        "DESTINO": os.getenv("WEBAPP_URL_SHEET_1")
-    },
 
     # =========================
     # 📄 SHEET 2
     # =========================
     {
-        "nombre": "MP_VEIGA",
-        "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN5"),
-        "DESTINO": os.getenv("WEBAPP_URL_SHEET_2")
-    },
-    {
-        "nombre": "MP_MASULLO",
-        "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN7"),
+        "nombre": "MP_DIEGO",
+        "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKENDIEG"),
         "DESTINO": os.getenv("WEBAPP_URL_SHEET_2")
     }
 ]
