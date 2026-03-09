@@ -23,6 +23,11 @@ MP_ACCOUNTS = [
         "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKEN"),
         "DESTINO": os.getenv("WEBAPP_URL_SHEET_1")
     },
+    {
+        "nombre": "MP_BARONI",
+        "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKENBARONI"),
+        "DESTINO": os.getenv("WEBAPP_URL_SHEET_1")
+    },
 
     # =========================
     # 📄 SHEET 2
@@ -31,6 +36,14 @@ MP_ACCOUNTS = [
         "nombre": "MP_DIEGO",
         "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKENDIEG"),
         "DESTINO": os.getenv("WEBAPP_URL_SHEET_2")
+    },
+    # =========================
+    # 📄 SHEET WinSurf
+    # =========================
+    {
+        "nombre": "MP_HECTOR",
+        "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKENHECTOR"),
+        "DESTINO": os.getenv("WEBAPP_URL_SHEET_WINSURF")
     }
 ]
 
