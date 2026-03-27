@@ -21,7 +21,11 @@ MP_ACCOUNTS = [
     {
         "nombre": "MP_DIEGO",
         "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKENDIEG"),
-        "DESTINO": os.getenv("WEBAPP_URL_SHEET_2")
+        "DESTINO": [
+            url.strip()
+            for url in os.getenv("WEBAPP_URL_SHEET_2", "").split(",")
+            if url.strip()
+        ]
     },
     # =========================
     # 📄 SHEET WinSurf
@@ -29,7 +33,11 @@ MP_ACCOUNTS = [
     {
         "nombre": "MP_HECTOR",
         "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKENHECTOR"),
-        "DESTINO": os.getenv("WEBAPP_URL_SHEET_WINSURF")
+        "DESTINO": [
+            url.strip()
+            for url in os.getenv("WEBAPP_URL_SHEET_WINSURF", "").split(",")
+            if url.strip()
+        ]
     }
 ]
 
@@ -39,7 +47,7 @@ MP_ACCOUNTS = [
 for acc in MP_ACCOUNTS:
     if not acc["ACCESS_TOKEN"]:
         raise RuntimeError(f"❌ Falta ACCESS_TOKEN para {acc['nombre']}")
-    if not acc["DESTINO"]:
+    if not acc["DESTINO"] or (isinstance(acc["DESTINO"], list) and len(acc["DESTINO"]) == 0):
         raise RuntimeError(f"❌ Falta DESTINO para {acc['nombre']}")
 
 # ======================================================
@@ -144,9 +152,13 @@ def main():
             for acc in MP_ACCOUNTS:
                 nombre = acc["nombre"]
                 token = acc["ACCESS_TOKEN"]
-                destino = acc["DESTINO"]
-
-                lotes.setdefault(destino, [])
+                destinos = acc["DESTINO"]
+                # asegurar lista (por si alguna quedó como string)
+                if isinstance(destinos, str):
+                    destinos = [destinos]
+                
+                for d in destinos:
+                    lotes.setdefault(d, [])
 
                 # ⬅️ BUFFER DE SEGURIDAD (5 MIN)
                 desde_seguro = ultimo_dt - timedelta(minutes=5)
@@ -178,7 +190,8 @@ def main():
                     direccion = "SALIENTE" if (not dni) and (not email) else "ENTRANTE"
 
                     lote_op = convertir_op(op, nombre, direccion)
-                    lotes[destino].append(lote_op)
+                    for d in destinos:
+                        lotes[d].append(lote_op)
                     procesados[nombre].append(op_id)
 
                     # ⬅️ SOLO AVANZA, NUNCA RETROCEDE
