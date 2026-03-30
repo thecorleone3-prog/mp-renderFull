@@ -153,7 +153,7 @@ def main():
                 nombre = acc["nombre"]
                 token = acc["ACCESS_TOKEN"]
                 destinos = acc["DESTINO"]
-                # asegurar lista (por si alguna quedó como string)
+                
                 if isinstance(destinos, str):
                     destinos = [destinos]
                 
@@ -190,8 +190,11 @@ def main():
                     direccion = "SALIENTE" if (not dni) and (not email) else "ENTRANTE"
 
                     lote_op = convertir_op(op, nombre, direccion)
+                    
+                    # 🔥 FIX CLAVE: Agregar una copia independiente a cada destino
                     for d in destinos:
-                        lotes[d].append(lote_op)
+                        lotes[d].append(lote_op.copy())
+                        
                     procesados[nombre].append(op_id)
 
                     # ⬅️ SOLO AVANZA, NUNCA RETROCEDE
@@ -199,22 +202,25 @@ def main():
                         ultimo_dt = fecha_op
 
             # ==================================================
-            # 📤 ENVÍO A GOOGLE APPS SCRIPT
+            # 📤 ENVÍO A DESTINOS (GAS / RAILWAY)
             # ==================================================
             for destino, lote in lotes.items():
                 if not lote:
                     continue
+                
+                # Identificador visual para los logs (si es railway o sheets)
+                tipo_destino = "RAILWAY" if "railway.app" in destino else "SHEETS"
 
                 try:
                     r = session.post(destino, json=lote, timeout=15)
                     if r.status_code == 200:
-                        print(f"📤 {len(lote)} ops → OK")
+                        print(f"📤 {len(lote)} ops → {tipo_destino} (OK)")
                     else:
-                        print(f"❌ GAS {r.status_code}: {r.text}")
+                        print(f"❌ ERROR {tipo_destino} ({r.status_code}): {r.text}")
                 except requests.Timeout:
-                    print("⏱ Timeout GAS")
+                    print(f"⏱ Timeout en envío a {tipo_destino}")
                 except Exception as e:
-                    print("❌ Error GAS:", repr(e))
+                    print(f"❌ Error al enviar a {tipo_destino}:", repr(e))
 
         except Exception as e:
             print("🔥 ERROR GENERAL:", repr(e))
