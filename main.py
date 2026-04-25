@@ -38,6 +38,25 @@ MP_ACCOUNTS = [
             for url in os.getenv("WEBAPP_URL_SHEET_WINSURF", "").split(",")
             if url.strip()
         ]
+    },
+
+    {
+        "nombre": "MP_GUSTAVO",
+        "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKENGUS"),
+        "DESTINO": [
+            url.strip()
+            for url in os.getenv("WEBAPP_URL_SHEET_WINSURF", "").split(",")
+            if url.strip()
+        ]
+    },
+    {
+        "nombre": "MP_NOELIA",
+        "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKENNOELIA"),
+        "DESTINO": [
+            url.strip()
+            for url in os.getenv("WEBAPP_URL_SHEET_WINSURF", "").split(",")
+            if url.strip()
+        ]
     }
 ]
 
