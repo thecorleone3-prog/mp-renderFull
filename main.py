@@ -15,9 +15,6 @@ load_dotenv(override=True)
 # 🔥 CUENTAS MP + DESTINO
 # ======================================================
 MP_ACCOUNTS = [
-    # =========================
-    # 📄 SHEET CROWN
-    # =========================
     {
         "nombre": "MP_DIEGO",
         "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKENDIEG"),
@@ -27,9 +24,6 @@ MP_ACCOUNTS = [
             if url.strip()
         ]
     },
-    # =========================
-    # 📄 SHEET WinSurf
-    # =========================
     {
         "nombre": "MP_HECTOR",
         "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKENHECTOR"),
@@ -39,7 +33,6 @@ MP_ACCOUNTS = [
             if url.strip()
         ]
     },
-
     {
         "nombre": "MP_GUSTAVO",
         "ACCESS_TOKEN": os.getenv("MP_ACCESS_TOKENGUS"),
@@ -70,17 +63,21 @@ for acc in MP_ACCOUNTS:
         raise RuntimeError(f"❌ Falta DESTINO para {acc['nombre']}")
 
 # ======================================================
-# 🕒 FECHA INICIAL (UTC)
+# 🕒 RELOJES INDEPENDIENTES (FIX)
 # ======================================================
 inicio_dt = datetime.now(timezone.utc)
-ultimo_dt = inicio_dt
+
+# Creamos un diccionario para que cada cuenta tenga su propio reloj
+relojes_cuentas = {
+    acc["nombre"]: inicio_dt
+    for acc in MP_ACCOUNTS
+}
 
 def formato_mp(dt):
     dt = dt.replace(microsecond=0)
     return dt.strftime("%Y-%m-%dT%H:%M:%S") + ".000Z"
 
 print("🟢 Script iniciado")
-print("🕒 Inicio:", formato_mp(inicio_dt))
 
 # ======================================================
 # 📦 CACHE FIFO DE IDS PROCESADOS
@@ -104,7 +101,7 @@ def obtener_operaciones(access_token, desde):
     params = {
         "sort": "date_created",
         "criteria": "desc",
-        "limit": 20,
+        "limit": 100, # 🔥 FIX: Límite al máximo
         "begin_date": formato_mp(desde)
     }
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -136,17 +133,14 @@ def convertir_op(op, origen, direccion):
         "id": op.get("id"),
         "origen": origen,
         "direccion": direccion,
-
         "monto": op.get("transaction_amount"),
         "fecha": op.get("date_created"),
         "estado": op.get("status"),
         "tipo": op.get("operation_type"),
-
         "dni": op.get("payer", {}).get("identification", {}).get("number"),
         "email": op.get("payer", {}).get("email"),
         "nombre": op.get("payer", {}).get("first_name"),
         "apellido": op.get("payer", {}).get("last_name"),
-
         "bank_transfer_id": td.get("bank_transfer_id"),
         "acquirer_reference": td.get("acquirer_reference"),
         "e2e_id": tdata.get("e2e_id"),
@@ -161,7 +155,6 @@ def convertir_op(op, origen, direccion):
 # 🔁 LOOP PRINCIPAL
 # ======================================================
 def main():
-    global ultimo_dt
     print("🔁 Loop activo")
 
     while True:
@@ -179,8 +172,9 @@ def main():
                 for d in destinos:
                     lotes.setdefault(d, [])
 
-                # ⬅️ BUFFER DE SEGURIDAD (5 MIN)
-                desde_seguro = ultimo_dt - timedelta(minutes=5)
+                # 🔥 FIX: Usamos el reloj ESPECÍFICO de esta cuenta
+                reloj_actual_cuenta = relojes_cuentas[nombre]
+                desde_seguro = reloj_actual_cuenta - timedelta(minutes=5)
 
                 ops = obtener_operaciones(token, desde_seguro)
 
@@ -210,15 +204,14 @@ def main():
 
                     lote_op = convertir_op(op, nombre, direccion)
                     
-                    # 🔥 FIX CLAVE: Agregar una copia independiente a cada destino
                     for d in destinos:
                         lotes[d].append(lote_op.copy())
                         
                     procesados[nombre].append(op_id)
 
-                    # ⬅️ SOLO AVANZA, NUNCA RETROCEDE
-                    if fecha_op > ultimo_dt:
-                        ultimo_dt = fecha_op
+                    # 🔥 FIX CLAVE: Solo avanzamos el reloj de ESTA cuenta
+                    if fecha_op > relojes_cuentas[nombre]:
+                        relojes_cuentas[nombre] = fecha_op
 
             # ==================================================
             # 📤 ENVÍO A DESTINOS (GAS / RAILWAY)
@@ -227,7 +220,6 @@ def main():
                 if not lote:
                     continue
                 
-                # Identificador visual para los logs (si es railway o sheets)
                 tipo_destino = "RAILWAY" if "railway.app" in destino else "SHEETS"
 
                 try:
