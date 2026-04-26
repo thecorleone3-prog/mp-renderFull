@@ -101,7 +101,7 @@ def obtener_operaciones(access_token, desde):
     params = {
         "sort": "date_created",
         "criteria": "desc",
-        "limit": 100, # 🔥 FIX: Límite al máximo
+        "limit": 40, # 🔥 FIX: Límite al máximo
         "begin_date": formato_mp(desde)
     }
     headers = {"Authorization": f"Bearer {access_token}"}
