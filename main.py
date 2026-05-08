@@ -2,6 +2,7 @@ import requests
 import time
 import os
 import sys
+import json
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from collections import deque
@@ -63,15 +64,31 @@ for acc in MP_ACCOUNTS:
         raise RuntimeError(f"❌ Falta DESTINO para {acc['nombre']}")
 
 # ======================================================
-# 🕒 RELOJES INDEPENDIENTES (FIX)
+# 🕒 RELOJES PERSISTENTES (FIX DE REINICIOS)
 # ======================================================
-inicio_dt = datetime.now(timezone.utc)
+ARCHIVO_RELOJES = "relojes_estado.json"
 
-# Creamos un diccionario para que cada cuenta tenga su propio reloj
-relojes_cuentas = {
-    acc["nombre"]: inicio_dt
-    for acc in MP_ACCOUNTS
-}
+def cargar_relojes():
+    try:
+        if os.path.exists(ARCHIVO_RELOJES):
+            with open(ARCHIVO_RELOJES, "r") as f:
+                datos = json.load(f)
+                return {k: datetime.fromisoformat(v) for k, v in datos.items()}
+    except Exception as e:
+        print("⚠️ Error leyendo relojes guardados:", e)
+    
+    # Si no hay archivo, empieza desde el momento actual
+    return {acc["nombre"]: datetime.now(timezone.utc) for acc in MP_ACCOUNTS}
+
+def guardar_relojes(relojes):
+    try:
+        datos = {k: v.isoformat() for k, v in relojes.items()}
+        with open(ARCHIVO_RELOJES, "w") as f:
+            json.dump(datos, f)
+    except Exception as e:
+        print("⚠️ Error guardando relojes:", e)
+
+relojes_cuentas = cargar_relojes()
 
 def formato_mp(dt):
     dt = dt.replace(microsecond=0)
@@ -94,32 +111,65 @@ procesados = {
 session = requests.Session()
 
 # ======================================================
-# 📌 CONSULTAR OPERACIONES MP
+# 📌 CONSULTAR OPERACIONES MP (PAGINADO + REINTENTOS)
 # ======================================================
-def obtener_operaciones(access_token, desde):
+def obtener_operaciones(access_token, desde, max_reintentos=3):
     url = "https://api.mercadopago.com/v1/payments/search"
-    params = {
-        "sort": "date_created",
-        "criteria": "desc",
-        "limit": 40, # 🔥 FIX: Límite al máximo
-        "begin_date": formato_mp(desde)
-    }
+    hasta = datetime.now(timezone.utc)
+    
+    todas_las_operaciones = []
+    offset = 0
+    limit = 50 
+    
     headers = {"Authorization": f"Bearer {access_token}"}
 
-    try:
-        r = session.get(url, headers=headers, params=params, timeout=10)
-        if r.status_code != 200:
-            print(f"⚠️ MP {r.status_code}: {r.text}")
-            return []
-        return r.json().get("results", [])
-    except requests.Timeout:
-        print("⏱ Timeout MP")
-    except requests.ConnectionError:
-        print("🌐 Error conexión MP")
-    except Exception as e:
-        print("❌ Error MP:", repr(e))
+    while True:
+        params = {
+            "sort": "date_last_updated",
+            "criteria": "desc",
+            "limit": limit,
+            "offset": offset,
+            "range": "date_last_updated",
+            "begin_date": formato_mp(desde),
+            "end_date": formato_mp(hasta)
+        }
 
-    return []
+        for intento in range(1, max_reintentos + 1):
+            try:
+                r = session.get(url, headers=headers, params=params, timeout=10)
+                
+                if r.status_code == 200:
+                    resultados_pagina = r.json().get("results", [])
+                    todas_las_operaciones.extend(resultados_pagina)
+                    break 
+                    
+                if r.status_code in [500, 502, 503, 504]:
+                    if intento < max_reintentos:
+                        time.sleep(2 * intento)
+                        continue
+                    else:
+                        print("❌ Se agotaron los reintentos con MP.")
+                        return todas_las_operaciones
+                else:
+                    print(f"⚠️ MP {r.status_code}: {r.text}")
+                    return todas_las_operaciones
+
+            except (requests.Timeout, requests.ConnectionError):
+                if intento < max_reintentos:
+                    time.sleep(2 * intento)
+                else:
+                    return todas_las_operaciones
+            except Exception as e:
+                print("❌ Error inesperado MP:", repr(e))
+                return todas_las_operaciones
+        
+        # Paginación: si devolvió la cantidad máxima, pedimos la siguiente página
+        if 'resultados_pagina' in locals() and len(resultados_pagina) == limit:
+            offset += limit 
+        else:
+            break 
+
+    return todas_las_operaciones
 
 # ======================================================
 # 📌 NORMALIZAR OPERACIÓN
@@ -172,7 +222,6 @@ def main():
                 for d in destinos:
                     lotes.setdefault(d, [])
 
-                # 🔥 FIX: Usamos el reloj ESPECÍFICO de esta cuenta
                 reloj_actual_cuenta = relojes_cuentas[nombre]
                 desde_seguro = reloj_actual_cuenta - timedelta(minutes=5)
 
@@ -184,8 +233,9 @@ def main():
                         continue
 
                     try:
+                        # 🔥 FIX: Usamos date_last_updated para actualizar el reloj
                         fecha_op = datetime.fromisoformat(
-                            op["date_created"].replace("Z", "+00:00")
+                            op["date_last_updated"].replace("Z", "+00:00")
                         )
                     except Exception:
                         continue
@@ -209,9 +259,11 @@ def main():
                         
                     procesados[nombre].append(op_id)
 
-                    # 🔥 FIX CLAVE: Solo avanzamos el reloj de ESTA cuenta
                     if fecha_op > relojes_cuentas[nombre]:
                         relojes_cuentas[nombre] = fecha_op
+
+            # 💾 GUARDAR ESTADO DESPUÉS DE REVISAR LAS CUENTAS
+            guardar_relojes(relojes_cuentas)
 
             # ==================================================
             # 📤 ENVÍO A DESTINOS (GAS / RAILWAY)
